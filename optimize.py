@@ -20,7 +20,7 @@ if 0:
 else:
     bottomleft = (-200, -200)
     topright = (200, 200)
-    square = gpd.GeoDataFrame(geometry=[Polygon([(0, 0), (100, 0), (120, 70), (30, 100), (0, 100), (0, 0)])])
+    square = gpd.GeoDataFrame(geometry=[Polygon([(0, 0), (10, -80), (130, 0), (120, 70), (30, 100), (0, 100), (-30, 50), (0, 0)])])
 
 ax.set_xlim([bottomleft[0], topright[0]])
 ax.set_ylim([bottomleft[1], topright[1]])
@@ -137,10 +137,10 @@ def vedge(edge: LineString, d: int = 1):
 
 square.boundary.plot(ax=ax, linewidth=4, color="red")
 
-points = gdfgs(*[Point(coord) for coord in square.exterior.iloc[0].coords])
 
 
 def get_triangle_circumcenter(triangle: Polygon) -> Point:
+    # return triangle.centroid
     # chatgpt
     # Ensure it's a triangle
     coords = list(triangle.exterior.coords)
@@ -170,8 +170,6 @@ def get_triangle_circumcenter(triangle: Polygon) -> Point:
 
     return Point(Ux, Uy)
 
-d = points.delaunay_triangles()
-
 # d.boundary.plot(ax=ax, color="green")
 
 def mirror_point_about_perpendicular(point: Point, edge: LineString) -> Point:
@@ -188,21 +186,29 @@ def mirror_point_about_perpendicular(point: Point, edge: LineString) -> Point:
 
     return Point(P - (P - proj_coords) * 2)
 
-p1 = get_triangle_circumcenter(d.iloc[0])
-p2 = get_triangle_circumcenter(d.iloc[1])
-p3 = get_triangle_circumcenter(d.iloc[2])
+# p1 = get_triangle_circumcenter(d.iloc[0])
+# p2 = get_triangle_circumcenter(d.iloc[1])
+# p3 = get_triangle_circumcenter(d.iloc[2])
+
+points = gdfgs(*[Point(coord) for coord in square.exterior.iloc[0].coords])
+
+d = points.delaunay_triangles()
+
+# d.boundary.plot(ax=ax, color="green")
+
 
 edges = edges_from_shape(square.iloc[0].geometry)
 
-points = gdfgs(
-     p1,
-     p2,
-     p3,
-     # mirror_point_about_perpendicular(p1, edges.iloc[4]),
-     # mirror_point_about_perpendicular(p1, edges.iloc[3]),
-     # mirror_point_about_perpendicular(p2, edges.iloc[2]),
-     # mirror_point_about_perpendicular(p3, edges.iloc[0]),
-     # mirror_point_about_perpendicular(p3, edges.iloc[1]),
+points = gdfgs(*[
+    get_triangle_circumcenter(dp)
+    for dp
+    in points.delaunay_triangles()
+])
+
+# points = gpd.GeoDataFrame(geometry=square.centroid)
+
+# points = points[points.within(square.iloc[0].geometry)]
+
      # *[
      #    mirror_point_about_perpendicular(p1, edge)
      #    for edge
@@ -211,28 +217,21 @@ points = gdfgs(
      #        gpd.GeoDataFrame(geometry=vnormal(points, p1, v))
      #    ).geometry
      # ]
-)
 
 v = vor(points)
 
+
 points = pd.concat([
     points,
-    gdfgs(*[
-        mirror_point_about_perpendicular(p1, edge)
+    *[gdfgs(*[
+        mirror_point_about_perpendicular(p, edge)
         for edge
-        in edges[edges.intersects(polygons_contains_point(v, p1))]
-    ]),
-    gdfgs(*[
-        mirror_point_about_perpendicular(p2, edge)
-        for edge
-        in edges[edges.intersects(polygons_contains_point(v, p2))]
-    ]),
-    gdfgs(*[
-        mirror_point_about_perpendicular(p3, edge)
-        for edge
-        in edges[edges.intersects(polygons_contains_point(v, p3))]
-    ]),
-    ],
+        in edges[edges.intersects(polygons_contains_point(v, p))]
+    ])
+    for p in points[points.within(square.iloc[0].geometry)].geometry
+    ]],
+    ignore_index=True
+)
     # *[
     #    mirror_point_about_perpendicular(p1, edge)
     #    for edge
@@ -241,9 +240,11 @@ points = pd.concat([
     #        gpd.GeoDataFrame(geometry=vnormal(points, p1, v))
     #    ).geometry
     # ]],
-    ignore_index=True
-)
+#     ignore_index=True
+# )
 
+
+# points.drop([10, 11], inplace=True)
 v = vor(points)
 
 
@@ -262,7 +263,7 @@ v = vor(points)
 def vdraw(points, v):
     points.plot(ax=ax)
     v.boundary.plot(ax=ax) #, linewidth=2, linestyle='dashed')
-    vnormals(points, v).plot(ax=ax, linewidth=0.5, linestyle='dotted')
+    # vnormals(points, v).plot(ax=ax, linewidth=0.5, linestyle='dotted')
 
 v = vor(points)
 vdraw(points, v)
