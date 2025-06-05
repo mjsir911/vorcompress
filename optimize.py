@@ -2,6 +2,7 @@ import geopandas as gpd
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Button, Slider
 from shapely.geometry import Polygon, Point, LineString
 
 # def draw(*objs):
@@ -21,7 +22,6 @@ square = gpd.GeoDataFrame(geometry=[Polygon([(0, 0), (100, 0), (100, 100), (0, 1
 #     Point(-0.5, 0.5),
 # ]))
 
-square.boundary.plot(ax=ax, linewidth=4, color="red")
 
 def vor(points):
     v = gpd.GeoDataFrame(geometry=points.voronoi_polygons(), crs=points.crs)
@@ -42,6 +42,7 @@ def vadjacent_polys(point: Point, v):
     # get point from points with points.iloc[idx].geometry
     # point = points.iloc[idx].geometry
     poly = polygons_contains_point(v, point)
+    # https://stackoverflow.com/questions/28028910/how-to-deal-with-rounding-errors-in-shapely
     # npoly = v[v.touches(poly)]
     npoly = v[v.geometry.intersection(poly).geom_type == 'LineString']
     return npoly
@@ -114,15 +115,39 @@ def vedge(edge: LineString, d: int = 1):
     return get_intersection_with_circle(midpoint, vec, d)
 
 edge = edges_from_shape(square.iloc[0].geometry).iloc[0]
-points = gpd.GeoDataFrame(
-    geometry=pd.concat([vedge(edge, d=30) for edge in edges_from_shape(square.iloc[0].geometry)], ignore_index=True)
+
+
+
+
+axslider = f.add_axes([0.25, 0.05, 0.65, 0.03])
+
+slider = Slider(
+    ax=axslider,
+    label='d',
+    valmin=1,
+    valmax=50,
+    valinit=30,
 )
 
-points.plot(ax=ax)
+def update(val):
+    ax.clear()
+    ax.set_xlim([-100, 200])
+    ax.set_ylim([-100, 200])
+    square.boundary.plot(ax=ax, linewidth=4, color="red")
+    points = gpd.GeoDataFrame(
+        geometry=pd.concat([vedge(edge, d=slider.val) for edge in edges_from_shape(square.iloc[0].geometry)], ignore_index=True)
+    )
 
-v = vor(points)
-v.boundary.plot(ax=ax) #, linewidth=2, linestyle='dashed')
-vnormals(points, v).plot(ax=ax, linewidth=0.5, linestyle='dotted')
+    points.plot(ax=ax)
+
+    v = vor(points)
+    v.boundary.plot(ax=ax) #, linewidth=2, linestyle='dashed')
+    vnormals(points, v).plot(ax=ax, linewidth=0.5, linestyle='dotted')
+
+    f.canvas.draw_idle()
+
+slider.on_changed(update)
+
 
 # a = points.iloc[[0]]
 
