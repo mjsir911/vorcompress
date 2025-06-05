@@ -1,5 +1,6 @@
 import geopandas as gpd
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from shapely.geometry import Polygon, Point, LineString
 
@@ -10,15 +11,15 @@ f, ax = plt.subplots()
     # plt.show()
     # f.waitforbuttonpress()
 
-square = gpd.GeoDataFrame(geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)])])
+square = gpd.GeoDataFrame(geometry=[Polygon([(0, 0), (100, 0), (100, 100), (0, 100), (0, 0)])])
 
-points = gpd.GeoDataFrame(geometry=gpd.GeoSeries([
-    square.centroid.iloc[0],
-    Point(0.5, 1.5),
-    Point(1.5, 0.5),
-    Point(0.5, -0.5),
-    Point(-0.5, 0.5),
-]))
+# points = gpd.GeoDataFrame(geometry=gpd.GeoSeries([
+#     square.centroid.iloc[0],
+#     Point(0.5, 1.5),
+#     Point(1.5, 0.5),
+#     Point(0.5, -0.5),
+#     Point(-0.5, 0.5),
+# ]))
 
 square.boundary.plot(ax=ax, linewidth=4, color="red")
 
@@ -30,42 +31,106 @@ def vor(points):
     # return v.merge(joined[["tzid", "index_right"]], left_index=True, right_on="index_right").drop(columns=["index_right"])
 
     # return points.voronoi_polygons()
-    
+
 def polygons_contains_point(polys, point) -> Polygon:
     # get the point from points.iloc[0] or similar
     # NOT points.iloc[[0]]
     # this only checks for a single point
-    return polys[polys.geometry.contains(point)].iloc[0]
+    return polys[polys.geometry.contains(point)].iloc[0].geometry
+
+def vadjacent_polys(point: Point, v):
+    # get point from points with points.iloc[idx].geometry
+    # point = points.iloc[idx].geometry
+    poly = polygons_contains_point(v, point)
+    # npoly = v[v.touches(poly)]
+    npoly = v[v.geometry.intersection(poly).geom_type == 'LineString']
+    return npoly
 
 
 def vadjacent(points, point: Point, v):
     # get point from points with points.iloc[idx].geometry
     # point = points.iloc[idx].geometry
-    poly = polygons_contains_point(v, point)
-    npoly = v[v.touches(poly.geometry)]
+    npoly = vadjacent_polys(point, v)
     return points.iloc[npoly.index_point]
 
+def gdfgs(*poly):
+    return gpd.GeoDataFrame(geometry=gpd.GeoSeries(poly))
 
-    
-points.plot(ax=ax)
+
 
 def vnormals(points, v):
-    return pd.concat([vnormal(points, n, v) for n, _ in points.iterrows()])
+    return pd.concat([vnormal(points, point, v) for _, point in points.iterrows()], ignore_index=True)
 
 
-def vnormal(points, idx, v):
-    point = points.iloc[idx]
+def vnormal(points, point, v):
+    # point HAS to be a part of points
+    # point is what you get when you do points.iloc[n]
     neighbors = vadjacent(points, point.geometry, v)
     return gpd.GeoSeries([
         LineString([point.geometry, neighbor.geometry])
-        for n, neighbor in neighbors.iterrows()
+        for _, neighbor in neighbors.iterrows()
     ])
 
-# def vedge(
+def edges_from_shape(s: Polygon):
+    # pass iloc[0].geometry into this
+    b = s.boundary.coords
+    return gpd.GeoSeries([
+        LineString(b[k:k+2])
+        for k
+        in range(len(b) - 1)
+    ])
+
+
+def get_intersection_with_circle(midpoint, direction_vector, radius):
+    """
+    Given a midpoint and a direction vector, return two intersection points
+    of the line through the midpoint with a circle of given radius.
+    """
+    # Normalize the direction vector
+    unit_vec = direction_vector / np.linalg.norm(direction_vector)
+
+    # Scale to the radius
+    offset = unit_vec * radius
+
+    # Two points at ± offset from the midpoint
+    p1 = midpoint + offset
+    p2 = midpoint - offset
+
+    return gpd.GeoSeries([Point(p1), Point(p2)])
+
+def vedge(edge: LineString, d: int = 1):
+
+    # turn it into a vector
+    coords = np.array(edge.coords)
+    start, end = coords
+
+    # get the midpoint
+    midpoint = (start + end) / 2
+
+    vec = end - start
+    vec = np.array([-vec[1], vec[0]]) # rotate 90 degrees
+
+    # get the two points on the vector «d» units away from midpoint, circle intersection
+    return get_intersection_with_circle(midpoint, vec, d)
+
+edge = edges_from_shape(square.iloc[0].geometry).iloc[0]
+points = gpd.GeoDataFrame(
+    geometry=pd.concat([vedge(edge, d=30) for edge in edges_from_shape(square.iloc[0].geometry)], ignore_index=True)
+)
+
+points.plot(ax=ax)
 
 v = vor(points)
 v.boundary.plot(ax=ax) #, linewidth=2, linestyle='dashed')
 vnormals(points, v).plot(ax=ax, linewidth=0.5, linestyle='dotted')
+
+# a = points.iloc[[0]]
+
+
+# poly = polygons_contains_point(v, a.iloc[0].geometry)
+# gpd.GeoDataFrame(geometry=gpd.GeoSeries([poly])).plot(ax=ax)
+# vadjacent_polys(a.iloc[0].geometry, v).plot(ax=ax, linewidth=3, color='yellow')
+
 
 if __name__ == '__main__':
     plt.show()
