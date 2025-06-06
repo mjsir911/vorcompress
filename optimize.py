@@ -59,13 +59,19 @@ def polygons_contains_point(polys, point) -> Polygon:
     # this only checks for a single point
     return polys[polys.geometry.contains(point)].iloc[0].geometry
 
+
+def my_intersects(a, b):
+    # https://stackoverflow.com/questions/28028910/how-to-deal-with-rounding-errors-in-shapely
+    # return a[a.touches(b)]
+    # return a[a.geometry.intersection(b).geom_type == 'LineString']
+    intersections = a.geometry.intersection(b)
+    return a[~intersections.is_empty & (intersections.geom_type == 'LineString')]
+
 def vadjacent_polys(point: Point, v):
     # get point from points with points.iloc[idx].geometry
     # point = points.iloc[idx].geometry
     poly = polygons_contains_point(v, point)
-    # https://stackoverflow.com/questions/28028910/how-to-deal-with-rounding-errors-in-shapely
-    # npoly = v[v.touches(poly)]
-    npoly = v[v.geometry.intersection(poly).geom_type == 'LineString']
+    npoly = my_intersects(v, poly)
     return npoly
 
 
