@@ -182,19 +182,23 @@ def get_triangle_circumcenter(triangle: Polygon) -> Point:
 
 # d.boundary.plot(ax=ax, color="green")
 
-def mirror_point_about_perpendicular(point: Point, edge: LineString) -> Point:
-    if len(edge.coords) != 2:
-        raise ValueError("Edge must be a LineString with exactly 2 points.")
+def mirror_point_about_perpendicular(point: Point, line_segment: LineString) -> Point:
+    # chatgpt
+    # Convert Shapely Point and LineString to NumPy arrays
+    A = np.array(line_segment.coords[0])
+    B = np.array(line_segment.coords[1])
+    P = np.array([point.x, point.y])
 
-    # Convert to numpy arrays
-    P = np.array(*point.coords)
+    v = B - A  # direction vector of the line
+    w = P - A  # vector from A to P
 
-    # 4. Determine which side P lies on by checking vector from projection to P
-    projection = edge.interpolate(edge.project(point))  # closest point on line to P
-    proj_coords = np.array([projection.x, projection.y])
-    vec_proj_to_P = P - proj_coords
+    # Project w onto v
+    projection = A + (np.dot(w, v) / np.dot(v, v)) * v
 
-    return Point(P - (P - proj_coords) * 2)
+    # Reflect the point: P' = 2*projection - P
+    reflected = 2 * projection - P
+
+    return Point(reflected)
 
 
 def genpoints0():
