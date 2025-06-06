@@ -13,14 +13,18 @@ f, ax = plt.subplots()
     # f.waitforbuttonpress()
 
 
-if 0:
-    bottomleft = (-50, -50)
+if 1:
+    bottomleft = (-30, -10)
     topright = (30, 30)
     square = gpd.GeoDataFrame.from_file('wasd.shp')
 else:
     bottomleft = (-200, -200)
     topright = (200, 200)
     square = gpd.GeoDataFrame(geometry=[Polygon([(0, 0), (10, -80), (130, 0), (120, 70), (30, 100), (0, 100), (-30, 50), (0, 0)])])
+    # triangle
+    # square = gpd.GeoDataFrame(geometry=[Polygon([(0, 0), (10, -80), (-30, 50), (0, 0)])])
+    # square = gpd.GeoDataFrame(geometry=[Polygon([(0, 0), (100, 0), (100, 100), (0, 100)])])
+    # square = gpd.GeoDataFrame(geometry=[Polygon([(0, 0), (100, 0), (100, 80), (80, 100), (0, 100)])])
 
 ax.set_xlim([bottomleft[0], topright[0]])
 ax.set_ylim([bottomleft[1], topright[1]])
@@ -135,7 +139,7 @@ def vedge(edge: LineString, d: int = 1):
 
 
 
-square.boundary.plot(ax=ax, linewidth=4, color="red")
+square.boundary.plot(ax=ax, linewidth=4, color="red", linestyle='dashed')
 
 
 
@@ -186,78 +190,142 @@ def mirror_point_about_perpendicular(point: Point, edge: LineString) -> Point:
 
     return Point(P - (P - proj_coords) * 2)
 
-# p1 = get_triangle_circumcenter(d.iloc[0])
-# p2 = get_triangle_circumcenter(d.iloc[1])
-# p3 = get_triangle_circumcenter(d.iloc[2])
 
-points = gdfgs(*[Point(coord) for coord in square.exterior.iloc[0].coords])
+def genpoints0():
+    points = gpd.GeoDataFrame(geometry=square.centroid)
+    return iteratepoints1(points)
 
-d = points.delaunay_triangles()
+
+def genpoints2():
+    points = gdfgs(*[Point(coord) for coord in square.exterior.iloc[0].coords])
+
+    d = points.delaunay_triangles()
+
+    points = gdfgs(*[
+        get_triangle_circumcenter(dp)
+        for dp
+        in points.delaunay_triangles()
+    ])
+
+    # points = points[points.geometry.within(square)]
+
+    return iteratepoints1(points)
+    # return filterpoints(iteratepoints1(points), square)
+
+def genpoints3():
+    points = gdfgs(*[Point(coord) for coord in square.exterior.iloc[0].coords])
+
+    d = points.delaunay_triangles()
+    # d.plot(color='green', ax=ax)
+
+    points = gdfgs(*[
+        dp.centroid
+        # triangle_incenter(dp)
+        for dp
+        in points.delaunay_triangles()
+    ])
+
+    return iteratepoints1(points)
+
+def genpoints4():
+    points = gdfgs(*[Point(coord) for coord in square.exterior.iloc[0].coords])
+
+    d = points.delaunay_triangles()
+    # d.boundary.plot(color='green', ax=ax)
+
+    points = gdfgs(*[
+        triangle_incenter(dp)
+        for dp
+        in points.delaunay_triangles()
+    ])
+
+    points = iteratepoints1(points)
+    # points = iteratepoints1(points)
+    return points
+
+
+def triangle_incenter(t):
+    # Get coordinates of the triangle
+    coords = list(t.exterior.coords)[:3]  # Only the first 3, skip closing point
+
+    # Convert to NumPy array for easier math
+    A, B, C = np.array(coords[0]), np.array(coords[1]), np.array(coords[2])
+
+    # Calculate lengths of the sides opposite each vertex
+    a = np.linalg.norm(B - C)  # length of side opposite A
+    b = np.linalg.norm(C - A)  # length of side opposite B
+    c = np.linalg.norm(A - B)  # length of side opposite C
+
+    # Calculate incenter using weighted average of vertices
+    incenter = (a * A + b * B + c * C) / (a + b + c)
+
+    # Convert to shapely Point
+    incenter_point = Point(incenter)
+    return incenter_point
+
+
+def filterpoints(points, shape):
+    v = vor(points)
+    print(points)
+    toremove = []
+    for n, point in enumerate(points.geometry):
+        poly = polygons_contains_point(v, point)
+        if not poly.intersects(shape).iloc[0].geometry:
+            toremove.append(n)
+    return points.drop(toremove)
+
+
 
 # d.boundary.plot(ax=ax, color="green")
 
 
 edges = edges_from_shape(square.iloc[0].geometry)
 
-points = gdfgs(*[
-    get_triangle_circumcenter(dp)
-    for dp
-    in points.delaunay_triangles()
-])
 
 # points = gpd.GeoDataFrame(geometry=square.centroid)
 
 # points = points[points.within(square.iloc[0].geometry)]
 
-     # *[
-     #    mirror_point_about_perpendicular(p1, edge)
-     #    for edge
-     #    in gpd.sjoin(
-     #        gpd.GeoDataFrame(geometry=edges),
-     #        gpd.GeoDataFrame(geometry=vnormal(points, p1, v))
-     #    ).geometry
-     # ]
 
-v = vor(points)
-
-
-points = pd.concat([
-    points,
-    *[gdfgs(*[
-        mirror_point_about_perpendicular(p, edge)
+def genpoints1(d=10):
+    edges = edges_from_shape(square.iloc[0].geometry)
+    return gpd.GeoDataFrame(geometry=pd.concat([
+        vedge(edge, d)
         for edge
-        in edges[edges.intersects(polygons_contains_point(v, p))]
-    ])
-    for p in points[points.within(square.iloc[0].geometry)].geometry
-    ]],
-    ignore_index=True
-)
-    # *[
-    #    mirror_point_about_perpendicular(p1, edge)
-    #    for edge
-    #    in gpd.sjoin(
-    #        gpd.GeoDataFrame(geometry=edges),
-    #        gpd.GeoDataFrame(geometry=vnormal(points, p1, v))
-    #    ).geometry
-    # ]],
-#     ignore_index=True
-# )
+        in edges
+    ], ignore_index=True))
 
 
-# points.drop([10, 11], inplace=True)
-v = vor(points)
+def iteratepoints1(points):
+    v = vor(points)
+    return pd.concat([
+        points,
+        *[gdfgs(*[
+            mirror_point_about_perpendicular(p, edge)
+            for edge
+            in edges[edges.intersects(polygons_contains_point(v, p))]
+        ])
+        # for p in points[points.within(square.iloc[0].geometry)].geometry
+        for p in points.geometry
+        ]],
+        ignore_index=True
+    )
 
 
-# edge = edges_from_shape(square.iloc[0].geometry).iloc[0]
-#
-#
-# points = gpd.GeoDataFrame(geometry=pd.concat([
-#     vedge(edges.iloc[0], d=30),
-#     vedge(edges.iloc[1], d=30),
-#     vedge(edges.iloc[2], d=30), # this is the diagonal
-#     vedge(edges.iloc[3], d=30),
-#     vedge(edges.iloc[4], d=30),
-# ], ignore_index=True))
+def optimizepoints(points, shape, v=None):
+    if v is None:
+        v = vor(points)
+    droppable = []
+
+    edges = edges_from_shape(square.iloc[0].geometry)
+
+    for n, point in points.iterrows():
+        poly = polygons_contains_point(v, point.geometry)
+        if not (any(edges.intersects(poly)) or any(edges.touches(poly))):
+            droppable.append(n)
+
+    return points.drop(droppable)
+
 
 
 def vdraw(points, v):
@@ -265,11 +333,31 @@ def vdraw(points, v):
     v.boundary.plot(ax=ax) #, linewidth=2, linestyle='dashed')
     # vnormals(points, v).plot(ax=ax, linewidth=0.5, linestyle='dotted')
 
+points = genpoints4()
+print(points)
+# points = optimizepoints(points, square)
 v = vor(points)
 vdraw(points, v)
 
 
 
+
+
+def update(val):
+    ax.clear()
+    ax.set_xlim([bottomleft[0], topright[0]])
+    ax.set_ylim([bottomleft[1], topright[1]])
+    square.boundary.plot(ax=ax, linewidth=4, color="red")
+
+    edges = edges_from_shape(square.iloc[0].geometry)
+
+    points = genpoints1(d=slider.val)
+
+    v = vor(points)
+
+    vdraw(points, v)
+
+    f.canvas.draw_idle()
 
 # axslider = f.add_axes([0.25, 0.05, 0.65, 0.03])
 #
@@ -281,29 +369,7 @@ vdraw(points, v)
 #     valinit=30,
 # )
 #
-# def update(val):
-#     ax.clear()
-#     ax.set_xlim([-70, 170])
-#     ax.set_ylim([-70, 170])
-#     square.boundary.plot(ax=ax, linewidth=4, color="red")
-#
-#     edges = edges_from_shape(square.iloc[0].geometry)
-#
-#     points = gpd.GeoDataFrame(geometry=pd.concat([
-#         vedge(edges.iloc[0], d=slider.val),
-#         vedge(edges.iloc[1], d=slider.val),
-#         vedge(edges.iloc[2], d=slider.val * 1.2), # this is the diagonal
-#         vedge(edges.iloc[3], d=slider.val),
-#         vedge(edges.iloc[4], d=slider.val),
-#     ], ignore_index=True))
-#
-#     v = vor(points)
-#     vdraw(v)
-#
-#     f.canvas.draw_idle()
-#
 # slider.on_changed(update)
-
 
 # a = points.iloc[[0]]
 
