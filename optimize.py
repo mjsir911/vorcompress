@@ -321,6 +321,21 @@ def iteratepoints1(points):
         ignore_index=True
     )
 
+def iteratepoints2(points):
+    v = vor(points)
+    return pd.concat([
+        points,
+        *[gdfgs(*[
+            mirror_point_about_perpendicular(p, edge)
+            for edge
+            in my_intersects(edges, polygons_contains_point(v, p))
+        ])
+        # for p in points[points.within(square.iloc[0].geometry)].geometry
+        for p in points.geometry
+        ]],
+        ignore_index=True
+    )
+
 
 def optimizepoints(points, shape, v=None):
     if v is None:
